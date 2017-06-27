@@ -21,13 +21,16 @@
 // Shader
 #include "Shader.hpp"
 
+// Input manager
+#include "InputManager.hpp"
+
 // Window size
-const unsigned int WIDTH = 800;
-const unsigned int HEIGHT = 800;
+unsigned int screenWidth = 1280;
+unsigned int screenHeight = 800;
 
 int main() {
 	// create the window
-	sf::Window window(sf::VideoMode(WIDTH, HEIGHT), "OpenGL", sf::Style::Default, sf::ContextSettings(24));
+	sf::Window window(sf::VideoMode(screenWidth, screenHeight), "OpenGL", sf::Style::Default, sf::ContextSettings(24));
 
 	// initialise glew
 	GLenum err = glewInit();
@@ -199,6 +202,14 @@ int main() {
 		glm::vec3(-1.3f,  1.0f, -1.5f)
 	};
 
+	// camera
+	glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
+	glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+	glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+
+	// input manager
+	InputManager inputManager;
+
 	// render loop
 	sf::Clock clock;
 	float deltaTime;
@@ -206,7 +217,6 @@ int main() {
 		// get time
 		deltaTime = clock.getElapsedTime().asSeconds();
 
-		/*
 		sf::Event event;
 		while (window.pollEvent(event)) {
 			switch (event.type) {
@@ -214,11 +224,38 @@ int main() {
 				window.close();
 				break;
 			case sf::Event::Resized:
-				glViewport(0, 0, event.size.width, event.size.height);
+				screenWidth = event.size.width;
+				screenHeight = event.size.height;
+				glViewport(0, 0, screenWidth, screenHeight);
+				break;
+			case sf::Event::KeyPressed:
+				inputManager.PressKey(event.key.code);
+				break;
+			case sf::Event::KeyReleased:
+				inputManager.ReleaseKey(event.key.code);
+				break;
+			case sf::Event::LostFocus:
+				inputManager.ReleaseAllKeys();
 				break;
 			}
 		}
-		*/
+
+		// movement
+		float cameraSpeed = 0.05f;
+		if (window.hasFocus()) {
+			if (inputManager.IsKeyPressed(sf::Keyboard::Key::W)) {
+				cameraPos += cameraSpeed * cameraFront;
+			}
+			if (inputManager.IsKeyPressed(sf::Keyboard::Key::A)) {
+				cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+			}
+			if (inputManager.IsKeyPressed(sf::Keyboard::Key::S)) {
+				cameraPos -= cameraSpeed * cameraFront;
+			}
+			if (inputManager.IsKeyPressed(sf::Keyboard::Key::D)) {
+				cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+			}
+		}
 
 		// render
 		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
@@ -239,11 +276,11 @@ int main() {
 
 		// move the camera backwards (by pushing the scene forwards into the negative z direction)
 		glm::mat4 view;
-		view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
+		view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
 
 		// perspective projection
 		glm::mat4 projection;
-		projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
+		projection = glm::perspective(glm::radians(45.0f), (float)screenWidth / (float)screenHeight, 0.1f, 100.0f);
 
 		int modelLoc = glGetUniformLocation(ourShader.getID(), "vModel");
 		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
