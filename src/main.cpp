@@ -13,6 +13,11 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
+// GLM
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
 // Shader
 #include "Shader.hpp"
 
@@ -22,7 +27,7 @@ const unsigned int HEIGHT = 800;
 
 int main() {
 	// create the window
-	sf::Window window(sf::VideoMode(800, 600), "OpenGL", sf::Style::Default);
+	sf::Window window(sf::VideoMode(WIDTH, HEIGHT), "OpenGL", sf::Style::Default);
 
 	// initialise glew
 	GLenum err = glewInit();
@@ -34,7 +39,6 @@ int main() {
 	std::cout << (stdout, "Status: Using GLEW %s\n", glewGetString(GLEW_VERSION));
 
 	// activate the window
-	window.setVerticalSyncEnabled(true);
 	window.setActive(true);
 
 	// build and compile our shader program
@@ -42,11 +46,11 @@ int main() {
 
 	// set up vertex data (and buffer(s)) and configure vertex attributes
 	float vertices[] = {
-		 // positions         // colors           // texture coords
-		 0.5f,  0.5f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f, // top right
-		 0.5f, -0.5f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f, // bottom right
-		-0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f, // bottom left
-		-0.5f,  0.5f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 1.0f  // top left 
+		 // positions         // texture coords
+		 0.5f,  0.5f, 0.0f,   1.0f, 1.0f, // top right
+		 0.5f, -0.5f, 0.0f,   1.0f, 0.0f, // bottom right
+		-0.5f, -0.5f, 0.0f,   0.0f, 0.0f, // bottom left
+		-0.5f,  0.5f, 0.0f,   0.0f, 1.0f  // top left 
 	};
 
 	unsigned int indices[] = {
@@ -70,13 +74,11 @@ int main() {
 		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
 
 		glEnableVertexAttribArray(0);
 		glEnableVertexAttribArray(1);
-		glEnableVertexAttribArray(2);
 
 		glBindVertexArray(0);
 	}
@@ -133,21 +135,39 @@ int main() {
 		stbi_image_free(data);
 	}
 
-	// tell opengl for each sampler to which texture unit it belongs to (only has to be done once)
-	ourShader.use();
-	ourShader.setInt("fTexture1", 0);
-	ourShader.setInt("fTexture2", 1);
-	glUseProgram(0);
+	// setup shader uniforms
+	{
+		ourShader.use();
+
+		// textures
+		ourShader.setInt("fTexture1", 0);
+		ourShader.setInt("fTexture2", 1);
+
+		glUseProgram(0);
+	}
+
+	
+
 
 	// render loop
+	sf::Clock clock;
+	float deltaTime;
 	while (window.isOpen()) {
-		// process input
+		// get time
+		deltaTime = clock.getElapsedTime().asSeconds();
+
+		/*
 		sf::Event event;
 		while (window.pollEvent(event)) {
-			if (event.type == sf::Event::Closed) {
+			switch (event.type) {
+			case sf::Event::Closed:
 				window.close();
+				break;
+			case sf::Event::Resized:
+				glViewport(0, 0, event.size.width, event.size.height);
+				break;
 			}
-		}
+		}*/
 
 		// render
 		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
@@ -159,15 +179,42 @@ int main() {
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D, texture2);
 
-		// render container
+		// setup per-frame uniforms
 		ourShader.use();
+
+		// model matrix (translations, scaling, rotations to transform vertices into world space)
+		glm::mat4 model;
+		model = glm::rotate(model, glm::radians(deltaTime * 50), glm::vec3(1.0f, 1.0f, 0.0f));
+
+		// move the camera backwards (by pushing the scene forwards into the negative z direction)
+		glm::mat4 view;
+		view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
+
+		// perspective projection
+		glm::mat4 projection;
+		projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
+
+		int modelLoc = glGetUniformLocation(ourShader.getID(), "vModel");
+		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+
+		int viewLoc = glGetUniformLocation(ourShader.getID(), "vView");
+		glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
+
+		int projectionLoc = glGetUniformLocation(ourShader.getID(), "vProjection");
+		glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
+
+		// draw
 		glBindVertexArray(VAO);
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+		// unbind
 		glBindVertexArray(0);
 		glUseProgram(0);
 
 		// swap buffers
 		window.display();
+
+		sf::sleep(sf::milliseconds(5));
 	}
 
 	// de-allocate all resources once they've outlived their purpose:
