@@ -26,11 +26,16 @@
 
 // Window size
 unsigned int screenWidth = 1280;
-unsigned int screenHeight = 800;
+unsigned int screenHeight = 720;
+bool fullScreen = false;
 
 int main() {
 	// create the window
 	sf::Window window(sf::VideoMode(screenWidth, screenHeight), "OpenGL", sf::Style::Default, sf::ContextSettings(24));
+	window.setVerticalSyncEnabled(true);
+
+	// disable joystick to prevent slowdown from constant event polling
+	window.setJoystickEnabled(false);
 
 	// initialise glew
 	GLenum err = glewInit();
@@ -40,8 +45,8 @@ int main() {
 		return -1;
 	}
 	std::cout << (stdout, "Status: Using GLEW %s\n", glewGetString(GLEW_VERSION));
-
-	// activate the window
+	
+	// activate the window as the current OpenGL target
 	window.setActive(true);
 
 	// build and compile our shader program
@@ -92,10 +97,11 @@ int main() {
 		-0.5f,  0.5f, -0.5f,  0.0f, 1.0f
 	};
 
-	unsigned int indices[] = {
+	// indices
+	/* unsigned int indices[] = {
 		0, 1, 3, // first triangle
 		1, 2, 3  // second triangle
-	};
+	};*/
 
 	// generate buffer objects and vertex array
 	unsigned int VAO, VBO, EBO;
@@ -108,10 +114,10 @@ int main() {
 		glBindVertexArray(VAO);
 
 		glBindBuffer(GL_ARRAY_BUFFER, VBO);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+		//glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
 
 		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+		//glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
 		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
@@ -210,13 +216,29 @@ int main() {
 	// input manager
 	InputManager inputManager;
 
-	// render loop
+	// time
 	sf::Clock clock;
-	float deltaTime;
+	float currentTime = clock.getElapsedTime().asSeconds();
+	float previousTime = 0;
+	float deltaTime = 0;
+
+	// mouse
+	window.setMouseCursorGrabbed(true);
+	window.setMouseCursorVisible(false);
+	float yaw = -90.0f;	// yaw is initialized to -90.0 degrees since a yaw of 0.0 results in a direction vector pointing to the right so we initially rotate a bit to the left.
+	float pitch = 0.0f;
+	float middleX = screenWidth / 2.0f;
+	float middleY = screenHeight / 2.0f;
+	float fov = 45.0f;
+	sf::Mouse::setPosition(sf::Vector2i(middleX, middleY), window);
+
 	while (window.isOpen()) {
 		// get time
-		deltaTime = clock.getElapsedTime().asSeconds();
+		previousTime = currentTime;
+		currentTime = clock.getElapsedTime().asSeconds();
+		deltaTime = currentTime - previousTime;
 
+		// input processing
 		sf::Event event;
 		while (window.pollEvent(event)) {
 			switch (event.type) {
@@ -230,6 +252,44 @@ int main() {
 				break;
 			case sf::Event::KeyPressed:
 				inputManager.PressKey(event.key.code);
+				if (event.key.code == sf::Keyboard::Key::F11) {
+					// toggle fullscreen
+					{
+						fullScreen = !fullScreen;
+
+						HWND handle = window.getSystemHandle();
+						DWORD win32Style = WS_VISIBLE;
+
+						if (fullScreen) {
+							win32Style |= WS_POPUP;
+							sf::VideoMode desktopMode = sf::VideoMode::getDesktopMode();
+							screenWidth = desktopMode.width;
+							screenHeight = desktopMode.height;
+						} else {
+							win32Style |= WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU | WS_CAPTION;
+							sf::VideoMode windowMode = sf::VideoMode(1280, 720);
+							screenWidth = windowMode.width;
+							screenHeight = windowMode.height;
+							window.setSize(sf::Vector2u(screenWidth, screenHeight));
+						}
+
+						SetWindowLongPtr(handle, GWL_STYLE, win32Style);
+
+						// Force changes to take effect
+						SetWindowPos(handle, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_DRAWFRAME);
+
+						window.setSize(sf::Vector2u(screenWidth, screenHeight));
+						if (fullScreen) {
+							window.setPosition(sf::Vector2i(0, 0));
+						} else {
+							sf::VideoMode desktopMode = sf::VideoMode::getDesktopMode();
+							window.setPosition(sf::Vector2i(desktopMode.width / 2 - screenWidth / 2, desktopMode.height / 2 - screenHeight / 2));
+						}
+						glViewport(0, 0, screenWidth, screenHeight);
+					}
+				} else if (event.key.code == sf::Keyboard::Key::Escape) {
+					window.close();
+				}
 				break;
 			case sf::Event::KeyReleased:
 				inputManager.ReleaseKey(event.key.code);
@@ -240,8 +300,39 @@ int main() {
 			}
 		}
 
-		// movement
-		float cameraSpeed = 0.05f;
+		// mouse controlled camera
+		if (window.hasFocus()) {
+			sf::Vector2i mousePos = sf::Mouse::getPosition(window);
+
+			if ((mousePos.x > 0 && mousePos.x < screenWidth) &&
+				(mousePos.y > 0 && mousePos.y < screenHeight)) {
+
+				float xoffset = mousePos.x - middleX;
+				float yoffset = middleY - mousePos.y;
+				sf::Mouse::setPosition(sf::Vector2i(middleX, middleY), window);
+				float sensitivity = 0.1f;
+				xoffset *= sensitivity;
+				yoffset *= sensitivity;
+
+				yaw += xoffset;
+				pitch += yoffset;
+
+				if (pitch > 90.0f) {
+					pitch = 90.0f;
+				} else if (pitch < -90.0f) {
+					pitch = -90.0f;
+				}
+
+				glm::vec3 front;
+				front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+				front.y = sin(glm::radians(pitch));
+				front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+				cameraFront = glm::normalize(front);
+			}
+		}
+
+		// keyboard movement
+		float cameraSpeed = 2.5f * deltaTime;
 		if (window.hasFocus()) {
 			if (inputManager.IsKeyPressed(sf::Keyboard::Key::W)) {
 				cameraPos += cameraSpeed * cameraFront;
@@ -272,7 +363,7 @@ int main() {
 
 		// model matrix (translations, scaling, rotations to transform vertices into world space)
 		glm::mat4 model;
-		model = glm::rotate(model, (float)deltaTime * glm::radians(50.0f), glm::vec3(0.5f, 1.0f, 0.0f));
+		model = glm::rotate(model, (float)currentTime * glm::radians(50.0f), glm::vec3(0.5f, 1.0f, 0.0f));
 
 		// move the camera backwards (by pushing the scene forwards into the negative z direction)
 		glm::mat4 view;
@@ -296,7 +387,7 @@ int main() {
 		for (unsigned int i = 0; i < 10; i++) {
 			glm::mat4 model;
 			model = glm::translate(model, cubePositions[i]);
-			float angle = 20.0f * i + deltaTime*50;
+			float angle = 20.0f * i + currentTime * 50;
 			model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
 			ourShader.setMat4("vModel", model);
 
@@ -306,6 +397,11 @@ int main() {
 		// unbind
 		glBindVertexArray(0);
 		glUseProgram(0);
+
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, 0);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, 0);
 
 		// swap buffers
 		window.display();
