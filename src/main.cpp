@@ -18,11 +18,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-// Shader
+// My classes
 #include "Shader.hpp"
-
-// Input manager
-#include "InputManager.hpp"
+#include "Camera.hpp"
 
 // Window size
 unsigned int screenWidth = 1280;
@@ -44,8 +42,8 @@ int main() {
 		window.close();
 		return -1;
 	}
-	std::cout << (stdout, "Status: Using GLEW %s\n", glewGetString(GLEW_VERSION));
-	
+	// std::cout << (stdout, "Status: Using GLEW %s\n", glewGetString(GLEW_VERSION));
+
 	// activate the window as the current OpenGL target
 	window.setActive(true);
 
@@ -208,14 +206,6 @@ int main() {
 		glm::vec3(-1.3f,  1.0f, -1.5f)
 	};
 
-	// camera
-	glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
-	glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
-	glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
-
-	// input manager
-	InputManager inputManager;
-
 	// time
 	sf::Clock clock;
 	float currentTime = clock.getElapsedTime().asSeconds();
@@ -223,13 +213,11 @@ int main() {
 	float deltaTime = 0;
 
 	// mouse
+	Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
 	window.setMouseCursorGrabbed(true);
 	window.setMouseCursorVisible(false);
-	float yaw = -90.0f;	// yaw is initialized to -90.0 degrees since a yaw of 0.0 results in a direction vector pointing to the right so we initially rotate a bit to the left.
-	float pitch = 0.0f;
 	float middleX = screenWidth / 2.0f;
 	float middleY = screenHeight / 2.0f;
-	float fov = 45.0f;
 	sf::Mouse::setPosition(sf::Vector2i(middleX, middleY), window);
 
 	while (window.isOpen()) {
@@ -251,7 +239,6 @@ int main() {
 				glViewport(0, 0, screenWidth, screenHeight);
 				break;
 			case sf::Event::KeyPressed:
-				inputManager.PressKey(event.key.code);
 				if (event.key.code == sf::Keyboard::Key::F11) {
 					// toggle fullscreen
 					{
@@ -291,11 +278,8 @@ int main() {
 					window.close();
 				}
 				break;
-			case sf::Event::KeyReleased:
-				inputManager.ReleaseKey(event.key.code);
-				break;
-			case sf::Event::LostFocus:
-				inputManager.ReleaseAllKeys();
+			case sf::Event::MouseWheelScrolled:
+				camera.ProcessMouseScroll(event.mouseWheelScroll.delta);
 				break;
 			}
 		}
@@ -304,51 +288,39 @@ int main() {
 		if (window.hasFocus()) {
 			sf::Vector2i mousePos = sf::Mouse::getPosition(window);
 
+			// check whether the cursor is in the screen (it should be if it has been 'grabbed')
 			if ((mousePos.x > 0 && mousePos.x < screenWidth) &&
 				(mousePos.y > 0 && mousePos.y < screenHeight)) {
 
+				// find how much the cursor moved
 				float xoffset = mousePos.x - middleX;
 				float yoffset = middleY - mousePos.y;
+
+				// handle the movement
+				camera.ProcessMouseMovement(xoffset, yoffset);
+
+				// move the cursor back to the centre
 				sf::Mouse::setPosition(sf::Vector2i(middleX, middleY), window);
-				float sensitivity = 0.1f;
-				xoffset *= sensitivity;
-				yoffset *= sensitivity;
-
-				yaw += xoffset;
-				pitch += yoffset;
-
-				if (pitch > 90.0f) {
-					pitch = 90.0f;
-				} else if (pitch < -90.0f) {
-					pitch = -90.0f;
-				}
-
-				glm::vec3 front;
-				front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-				front.y = sin(glm::radians(pitch));
-				front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-				cameraFront = glm::normalize(front);
 			}
 		}
 
 		// keyboard movement
-		float cameraSpeed = 2.5f * deltaTime;
 		if (window.hasFocus()) {
-			if (inputManager.IsKeyPressed(sf::Keyboard::Key::W)) {
-				cameraPos += cameraSpeed * cameraFront;
+			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W)) {
+				camera.ProcessKeyboard(CameraMovement::FORWARD, deltaTime);
 			}
-			if (inputManager.IsKeyPressed(sf::Keyboard::Key::A)) {
-				cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A)) {
+				camera.ProcessKeyboard(CameraMovement::LEFT, deltaTime);
 			}
-			if (inputManager.IsKeyPressed(sf::Keyboard::Key::S)) {
-				cameraPos -= cameraSpeed * cameraFront;
+			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S)) {
+				camera.ProcessKeyboard(CameraMovement::BACKWARD, deltaTime);
 			}
-			if (inputManager.IsKeyPressed(sf::Keyboard::Key::D)) {
-				cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D)) {
+				camera.ProcessKeyboard(CameraMovement::RIGHT, deltaTime);
 			}
 		}
 
-		// render
+		// clear screen (color buffer and depth buffer)
 		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -366,12 +338,11 @@ int main() {
 		model = glm::rotate(model, (float)currentTime * glm::radians(50.0f), glm::vec3(0.5f, 1.0f, 0.0f));
 
 		// move the camera backwards (by pushing the scene forwards into the negative z direction)
-		glm::mat4 view;
-		view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+		glm::mat4 view = camera.GetViewMatrix();
 
 		// perspective projection
 		glm::mat4 projection;
-		projection = glm::perspective(glm::radians(45.0f), (float)screenWidth / (float)screenHeight, 0.1f, 100.0f);
+		projection = glm::perspective(glm::radians(camera.Zoom), (float)screenWidth / (float)screenHeight, 0.1f, 100.0f);
 
 		int modelLoc = glGetUniformLocation(ourShader.getID(), "vModel");
 		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
