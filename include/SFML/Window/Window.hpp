@@ -338,14 +338,6 @@ public:
     ////////////////////////////////////////////////////////////
     void setVerticalSyncEnabled(bool enabled);
 
-	////////////////////////////////////////////////////////////
-	/// \brief Enable or joystick event polling
-	///
-	/// \param enabled True to enable, false to disable
-	///
-	////////////////////////////////////////////////////////////
-	void setJoystickEnabled(bool enabled);
-
     ////////////////////////////////////////////////////////////
     /// \brief Show or hide the mouse cursor
     ///
@@ -535,7 +527,6 @@ private:
     Clock             m_clock;          ///< Clock for measuring the elapsed time between frames
     Time              m_frameTimeLimit; ///< Current framerate limit
     Vector2u          m_size;           ///< Current size of the window
-	bool			  m_joystickPollingEnabled = true;   ///< Determines whether joystick event polling will occur
 };
 
 } // namespace sf

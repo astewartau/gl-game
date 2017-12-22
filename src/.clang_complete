@@ -1,0 +1,13 @@
+-std=c++14
+-target
+i686-w64-windows-gnu
+-Wall
+-pedantic
+-DDEBUG
+-I..\include
+-Ie:\development\programs\mingw\bin\../lib/gcc/mingw32/6.3.0/include/c++
+-Ie:\development\programs\mingw\bin\../lib/gcc/mingw32/6.3.0/include/c++/mingw32
+-Ie:\development\programs\mingw\bin\../lib/gcc/mingw32/6.3.0/include/c++/backward
+-Ie:\development\programs\mingw\bin\../lib/gcc/mingw32/6.3.0/include
+-Ie:\development\programs\mingw\bin\../lib/gcc/mingw32/6.3.0/../../../../include
+-Ie:\development\programs\mingw\bin\../lib/gcc/mingw32/6.3.0/include-fixed
