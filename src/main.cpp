@@ -2,7 +2,6 @@
 #include <iostream>
 
 // GLEW
-#define GLEW_STATIC
 #include <GL/glew.h>
 
 // SFML
@@ -18,16 +17,66 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+// Window handles
 #include <windows.h>
 
 // My classes
 #include "Shader.hpp"
 #include "Camera.hpp"
 
-// Window size
+// Window settings
 unsigned int screenWidth = 1280;
 unsigned int screenHeight = 720;
 bool fullScreen = false;
+
+void toggle_fullscreen(sf::Window& window) {
+    fullScreen = !fullScreen;
+
+    HWND handle = window.getSystemHandle();
+    DWORD win32Style = WS_VISIBLE;
+
+    if (fullScreen) {
+	win32Style |= WS_POPUP;
+	sf::VideoMode desktopMode = sf::VideoMode::getDesktopMode();
+	screenWidth = desktopMode.width;
+	screenHeight = desktopMode.height;
+    } else {
+	win32Style |= WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU | WS_CAPTION;
+	sf::VideoMode windowMode = sf::VideoMode(1280, 720);
+	screenWidth = windowMode.width;
+	screenHeight = windowMode.height;
+	window.setSize(sf::Vector2u(screenWidth, screenHeight));
+    }
+
+    SetWindowLongPtr(handle, GWL_STYLE, win32Style);
+
+    // Force changes to take effect
+    SetWindowPos(
+	handle,
+	NULL,
+	0,
+	0,
+	0,
+        0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_DRAWFRAME
+    );
+
+    window.setSize(sf::Vector2u(screenWidth, screenHeight));
+    
+    if (fullScreen) {
+	window.setPosition(sf::Vector2i(0, 0));
+    } else {
+	sf::VideoMode desktopMode = sf::VideoMode::getDesktopMode();
+	window.setPosition(
+	    sf::Vector2i(
+	        desktopMode.width / 2 - screenWidth / 2,
+	        desktopMode.height / 2 - screenHeight / 2
+	    )
+        );
+    }
+    
+    glViewport(0, 0, screenWidth, screenHeight);
+}
 
 int main() {
     // create the window
@@ -116,7 +165,6 @@ int main() {
     {
 	glBindVertexArray(VAO);
 	
-
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);
 	//glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
 
@@ -321,53 +369,7 @@ int main() {
 		break;
 	    case sf::Event::KeyPressed:
 		if (event.key.code == sf::Keyboard::Key::F11) {
-		    // toggle fullscreen
-		    {
-			fullScreen = !fullScreen;
-
-			HWND handle = window.getSystemHandle();
-			DWORD win32Style = WS_VISIBLE;
-
-			if (fullScreen) {
-			    win32Style |= WS_POPUP;
-			    sf::VideoMode desktopMode = sf::VideoMode::getDesktopMode();
-			    screenWidth = desktopMode.width;
-			    screenHeight = desktopMode.height;
-			} else {
-			    win32Style |= WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU | WS_CAPTION;
-			    sf::VideoMode windowMode = sf::VideoMode(1280, 720);
-			    screenWidth = windowMode.width;
-			    screenHeight = windowMode.height;
-			    window.setSize(sf::Vector2u(screenWidth, screenHeight));
-			}
-
-			SetWindowLongPtr(handle, GWL_STYLE, win32Style);
-
-			// Force changes to take effect
-			SetWindowPos(
-			    handle,
-			    NULL,
-			    0,
-			    0,
-			    0,
-			    0,
-			    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_DRAWFRAME
-			);
-
-			window.setSize(sf::Vector2u(screenWidth, screenHeight));
-			if (fullScreen) {
-			    window.setPosition(sf::Vector2i(0, 0));
-			} else {
-			    sf::VideoMode desktopMode = sf::VideoMode::getDesktopMode();
-			    window.setPosition(
-			        sf::Vector2i(
-				    desktopMode.width / 2 - screenWidth / 2,
-				    desktopMode.height / 2 - screenHeight / 2
-				)
-			    );
-			}
-			glViewport(0, 0, screenWidth, screenHeight);
-		    }
+		    toggle_fullscreen(window);
 		} else if (event.key.code == sf::Keyboard::Key::Escape) {
 		    window.close();
 		}
